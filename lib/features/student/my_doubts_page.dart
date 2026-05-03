@@ -14,31 +14,101 @@ final studentDoubtsProvider = FutureProvider<List<dynamic>>((ref) async {
   return [];
 });
 
-class MyDoubtsPage extends ConsumerWidget {
+class MyDoubtsPage extends ConsumerStatefulWidget {
   const MyDoubtsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MyDoubtsPage> createState() => _MyDoubtsPageState();
+}
+
+class _MyDoubtsPageState extends ConsumerState<MyDoubtsPage> {
+  String _selectedSubject = 'All';
+
+  @override
+  Widget build(BuildContext context) {
     final doubtsAsync = ref.watch(studentDoubtsProvider);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: isDark ? theme.colorScheme.surface : const Color(0xFFF5F6FA),
       appBar: AppBar(
         title: const Text(
-          'My Doubts',
+          'Doubt Library',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
+        backgroundColor: isDark ? const Color(0xFF0D1B2A) : theme.colorScheme.primary,
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded),
             onPressed: () => ref.refresh(studentDoubtsProvider),
           ),
         ],
       ),
-      body: doubtsAsync.when(
+      body: Column(
+        children: [
+          // ─── SUBJECT FILTER CHIPS ───
+          doubtsAsync.when(
+            data: (doubts) {
+              final subjects = <String>{'All'};
+              for (final d in doubts) {
+                if (d['subject_name'] != null) {
+                  subjects.add(d['subject_name'] as String);
+                }
+              }
+              return Container(
+                height: 60,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? theme.colorScheme.surface : Colors.white,
+                  border: Border(
+                    bottom: BorderSide(
+                      color: isDark ? Colors.white10 : Colors.grey.shade200,
+                    ),
+                  ),
+                ),
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: subjects.map((s) {
+                    final isSelected = _selectedSubject == s;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: FilterChip(
+                        label: Text(s),
+                        selected: isSelected,
+                        onSelected: (_) => setState(() => _selectedSubject = s),
+                        selectedColor: theme.colorScheme.primary.withAlpha(40),
+                        checkmarkColor: theme.colorScheme.primary,
+                        labelStyle: TextStyle(
+                          color: isSelected 
+                              ? theme.colorScheme.primary 
+                              : (isDark ? Colors.white70 : Colors.black87),
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 13,
+                        ),
+                        side: BorderSide(
+                          color: isSelected 
+                              ? theme.colorScheme.primary 
+                              : (isDark ? Colors.white24 : Colors.grey.shade300),
+                        ),
+                        backgroundColor: isDark ? Colors.white10 : Colors.grey.shade100,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (e, st) => const SizedBox.shrink(),
+          ),
+          Expanded(
+            child: doubtsAsync.when(
         loading: () => const Center(
           child: CircularProgressIndicator(color: Colors.orange),
         ),
@@ -47,7 +117,12 @@ class MyDoubtsPage extends ConsumerWidget {
             'Error: ${error.toString().replaceFirst('Exception: ', '')}',
           ),
         ),
-        data: (doubts) {
+        data: (allDoubts) {
+          final doubts = allDoubts.where((d) {
+            return _selectedSubject == 'All' ||
+                d['subject_name'] == _selectedSubject;
+          }).toList();
+
           if (doubts.isEmpty) {
             return Center(
               child: Column(
@@ -56,15 +131,14 @@ class MyDoubtsPage extends ConsumerWidget {
                   Icon(
                     Icons.speaker_notes_off_outlined,
                     size: 80,
-                    color: Colors.grey[300],
+                    color: isDark ? Colors.grey[800] : Colors.grey[300],
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No doubts posted yet',
+                    'No doubts found for this subject',
                     style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey[600],
-                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                      color: isDark ? Colors.grey[500] : Colors.grey[600],
                     ),
                   ),
                 ],
@@ -96,11 +170,11 @@ class MyDoubtsPage extends ConsumerWidget {
               return Container(
                 margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: isDark ? theme.colorScheme.surfaceContainerHigh : Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withAlpha(isDark ? 30 : 10),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -119,7 +193,6 @@ class MyDoubtsPage extends ConsumerWidget {
                         ),
                       );
                       if (didResolve == true) {
-                        // ignore: unused_result
                         ref.refresh(studentDoubtsProvider);
                       }
                     },
@@ -133,9 +206,10 @@ class MyDoubtsPage extends ConsumerWidget {
                               Expanded(
                                 child: Text(
                                   doubt['title'] ?? 'Untitled Doubt',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 16,
+                                    color: isDark ? Colors.white : Colors.black87,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -147,20 +221,16 @@ class MyDoubtsPage extends ConsumerWidget {
                                   vertical: 4,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
+                                  color: statusColor.withAlpha(40),
                                   borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: statusColor.withOpacity(0.5),
+                                    color: statusColor.withAlpha(80),
                                   ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      statusIcon,
-                                      color: statusColor,
-                                      size: 12,
-                                    ),
+                                    Icon(statusIcon, color: statusColor, size: 12),
                                     const SizedBox(width: 4),
                                     Text(
                                       statusText,
@@ -176,10 +246,31 @@ class MyDoubtsPage extends ConsumerWidget {
                             ],
                           ),
                           const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 10,
+                                backgroundColor: theme.colorScheme.primary.withAlpha(40),
+                                child: Icon(Icons.person, size: 12, color: theme.colorScheme.primary),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                doubt['student_id'] == ref.watch(authSessionProvider).value?.id
+                                    ? 'You asked this'
+                                    : (doubt['student_name'] ?? 'Student'),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark ? Colors.white70 : Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
                           Text(
                             doubt['description'] ?? 'No description provided',
                             style: TextStyle(
-                              color: Colors.grey[700],
+                              color: isDark ? Colors.white60 : Colors.grey[700],
                               fontSize: 14,
                             ),
                             maxLines: 2,
@@ -192,7 +283,7 @@ class MyDoubtsPage extends ConsumerWidget {
                               Icon(
                                 Icons.calendar_today,
                                 size: 14,
-                                color: Colors.grey[500],
+                                color: isDark ? Colors.white38 : Colors.grey[500],
                               ),
                               const SizedBox(width: 4),
                               Text(
@@ -204,29 +295,52 @@ class MyDoubtsPage extends ConsumerWidget {
                                       )
                                     : 'Unknown date',
                                 style: TextStyle(
-                                  color: Colors.grey[500],
+                                  color: isDark ? Colors.white38 : Colors.grey[500],
                                   fontSize: 12,
                                 ),
                               ),
+                              const SizedBox(width: 12),
+                              if (doubt['subject_name'] != null) ...[
+                                Icon(
+                                  Icons.subject,
+                                  size: 14,
+                                  color: isDark ? Colors.white38 : Colors.grey[500],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  doubt['subject_name'],
+                                  style: TextStyle(
+                                    color: isDark ? Colors.white38 : Colors.grey[500],
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                               const Spacer(),
-                              if (doubt['image_path'] != null &&
-                                  doubt['image_path'].toString().isNotEmpty)
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Icons.image,
-                                      size: 14,
-                                      color: Colors.grey[500],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      'Has Image',
-                                      style: TextStyle(
-                                        color: Colors.grey[500],
-                                        fontSize: 12,
+                              if (doubt['teacher_name'] != null)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: theme.colorScheme.primary.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.person_pin_rounded,
+                                        size: 14,
+                                        color: theme.colorScheme.primary,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        doubt['teacher_name'].split(' ')[0],
+                                        style: TextStyle(
+                                          color: theme.colorScheme.primary,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                             ],
                           ),
@@ -240,6 +354,9 @@ class MyDoubtsPage extends ConsumerWidget {
           );
         },
       ),
-    );
-  }
+    ),
+  ],
+),
+);
+}
 }

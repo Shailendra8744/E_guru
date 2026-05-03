@@ -169,7 +169,10 @@ class QuizListPage extends ConsumerWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => QuizTakingPage(quizId: quiz.id),
+                        builder: (_) => QuizTakingPage(
+                          quizId: quiz.id,
+                          quizTitle: quiz.title,
+                        ),
                       ),
                     );
                   },

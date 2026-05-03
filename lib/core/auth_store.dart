@@ -119,4 +119,30 @@ class AuthSessionNotifier extends AsyncNotifier<SessionUser?> {
     api.refreshToken = null;
     state = const AsyncData(null);
   }
+
+  Future<void> forgotPassword(String email) async {
+    final api = ref.read(apiClientProvider);
+    await api.post('/auth/forgot-password', {'email': email});
+  }
+}
+
+final userAvatarProvider = StateNotifierProvider<UserAvatarNotifier, int>((ref) {
+  return UserAvatarNotifier();
+});
+
+class UserAvatarNotifier extends StateNotifier<int> {
+  UserAvatarNotifier() : super(0) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getInt('selected_avatar_index') ?? 0;
+  }
+
+  Future<void> setAvatar(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('selected_avatar_index', index);
+    state = index;
+  }
 }

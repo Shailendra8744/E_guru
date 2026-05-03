@@ -40,9 +40,9 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load subjects: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Failed to load subjects: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -54,25 +54,30 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
       _filteredSubjects = _subjects;
     } else {
       _filteredSubjects = _subjects
-          .where((s) => s['name']
-              .toString()
-              .toLowerCase()
-              .contains(_searchQuery.toLowerCase()))
+          .where(
+            (s) => s['name'].toString().toLowerCase().contains(
+              _searchQuery.toLowerCase(),
+            ),
+          )
           .toList();
     }
   }
 
-  void _showAddSubjectSheet() {
+  void _showAddSubjectSheet({Map<String, dynamic>? editSubject}) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+
+    if (editSubject != null) {
+      _subjectNameController.text = editSubject['name'] ?? '';
+    } else {
+      _subjectNameController.clear();
+    }
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       builder: (ctx) {
         return Padding(
           padding: EdgeInsets.only(
@@ -101,19 +106,28 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withAlpha(isDark ? 40 : 20),
+                      color: theme.colorScheme.primary.withAlpha(
+                        isDark ? 40 : 20,
+                      ),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: Icon(Icons.add_task_rounded,
-                        color: theme.colorScheme.primary, size: 20),
+                    child: Icon(
+                      editSubject != null
+                          ? Icons.edit_rounded
+                          : Icons.add_task_rounded,
+                      color: theme.colorScheme.primary,
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    'Create New Subject',
+                    editSubject != null ? 'Edit Subject' : 'Create New Subject',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.grey.shade200 : Colors.grey.shade900,
+                      color: isDark
+                          ? Colors.grey.shade200
+                          : Colors.grey.shade900,
                     ),
                   ),
                 ],
@@ -138,22 +152,36 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
                   onPressed: () async {
                     final name = _subjectNameController.text.trim();
                     if (name.isEmpty) return;
-                    
+
                     try {
-                      await ref.read(apiClientProvider).post('/admin/subjects', {'name': name});
+                      final api = ref.read(apiClientProvider);
+                      if (editSubject != null) {
+                        await api.put('/admin/subjects/${editSubject['id']}', {
+                          'name': name,
+                        });
+                      } else {
+                        await api.post('/admin/subjects', {'name': name});
+                      }
+
                       if (ctx.mounted) {
                         Navigator.pop(ctx);
                         _subjectNameController.clear();
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          const SnackBar(content: Text('Subject created successfully!')),
+                          SnackBar(
+                            content: Text(
+                              editSubject != null
+                                  ? 'Subject updated!'
+                                  : 'Subject created!',
+                            ),
+                          ),
                         );
                         _loadSubjects();
                       }
                     } catch (e) {
                       if (ctx.mounted) {
-                        ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e')),
-                        );
+                        ScaffoldMessenger.of(
+                          ctx,
+                        ).showSnackBar(SnackBar(content: Text('Error: $e')));
                       }
                     }
                   },
@@ -163,7 +191,10 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text('Save Subject', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: Text(
+                    editSubject != null ? 'Update Subject' : 'Save Subject',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
               const SizedBox(height: 32),
@@ -174,15 +205,59 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
     );
   }
 
+  Future<void> _deleteSubject(int id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: const Text(
+          'Are you sure you want to delete this subject? (Soft Delete)',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await ref.read(apiClientProvider).post('/admin/subjects/$id/delete', {});
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Subject deleted.')));
+        _loadSubjects();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: isDark ? theme.colorScheme.surface : const Color(0xFFF5F6FA),
+      backgroundColor: isDark
+          ? theme.colorScheme.surface
+          : const Color(0xFFF5F6FA),
       appBar: AppBar(
-        title: const Text('Subject Management', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Subject Management',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         elevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: isDark ? Colors.white : Colors.black,
@@ -212,7 +287,9 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
                   hintText: 'Search subjects...',
                   prefixIcon: const Icon(Icons.search_rounded),
                   filled: true,
-                  fillColor: isDark ? theme.colorScheme.surfaceContainerHigh : Colors.white,
+                  fillColor: isDark
+                      ? theme.colorScheme.surfaceContainerHigh
+                      : Colors.white,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -221,92 +298,140 @@ class _SubjectsPageState extends ConsumerState<SubjectsPage> {
                 ),
               ),
             ),
-            
+
             Expanded(
               child: _isLoading && _subjects.isEmpty
                   ? const Center(child: CircularProgressIndicator())
                   : _filteredSubjects.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.search_off_rounded, size: 64, color: Colors.grey.shade400),
-                              const SizedBox(height: 16),
-                              Text(
-                                'No subjects found',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-                              ),
-                            ],
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off_rounded,
+                            size: 64,
+                            color: Colors.grey.shade400,
                           ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
-                          itemCount: _filteredSubjects.length,
-                          itemBuilder: (context, index) {
-                            final subject = _filteredSubjects[index];
-                            final name = subject['name']?.toString() ?? 'Unnamed';
-                            final id = subject['id']?.toString() ?? '?';
-                            final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+                          const SizedBox(height: 16),
+                          Text(
+                            'No subjects found',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                      itemCount: _filteredSubjects.length,
+                      itemBuilder: (context, index) {
+                        final subject = _filteredSubjects[index];
+                        final name = subject['name']?.toString() ?? 'Unnamed';
+                        final id = subject['id']?.toString() ?? '?';
+                        final initial = name.isNotEmpty
+                            ? name[0].toUpperCase()
+                            : '?';
 
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              decoration: BoxDecoration(
-                                color: isDark ? theme.colorScheme.surfaceContainerHigh : Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isDark ? Colors.grey.shade800.withAlpha(60) : Colors.grey.shade100,
-                                ),
-                                boxShadow: isDark ? null : [
-                                  BoxShadow(
-                                    color: Colors.black.withAlpha(8),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                leading: Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary.withAlpha(isDark ? 40 : 20),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      initial,
-                                      style: TextStyle(
-                                        color: theme.colorScheme.primary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 20,
-                                      ),
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? theme.colorScheme.surfaceContainerHigh
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.grey.shade800.withAlpha(60)
+                                  : Colors.grey.shade100,
+                            ),
+                            boxShadow: isDark
+                                ? null
+                                : [
+                                    BoxShadow(
+                                      color: Colors.black.withAlpha(8),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
                                     ),
-                                  ),
+                                  ],
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            leading: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.primary.withAlpha(
+                                  isDark ? 40 : 20,
                                 ),
-                                title: Text(
-                                  name,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: isDark ? Colors.white : Colors.grey.shade900,
-                                  ),
-                                ),
-                                subtitle: Text(
-                                  'Subject ID: #$id',
-                                  style: TextStyle(
-                                    color: Colors.grey.shade500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                trailing: Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
-                                onTap: () {
-                                  // Optional: View more details or edit
-                                },
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                            );
-                          },
-                        ),
+                              child: Center(
+                                child: Text(
+                                  initial,
+                                  style: TextStyle(
+                                    color: theme.colorScheme.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              name,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isDark
+                                    ? Colors.white
+                                    : Colors.grey.shade900,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Subject ID: #$id',
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.edit_rounded,
+                                    size: 20,
+                                    color: Colors.blue,
+                                  ),
+                                  onPressed: () => _showAddSubjectSheet(
+                                    editSubject: subject,
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    size: 20,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () => _deleteSubject(
+                                    int.tryParse(id.toString()) ?? 0,
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: Colors.grey.shade400,
+                                ),
+                              ],
+                            ),
+                            onTap: () {},
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),

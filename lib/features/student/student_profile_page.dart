@@ -15,6 +15,10 @@ class StudentProfilePage extends ConsumerWidget {
     required this.quizInsights,
   });
 
+  static const List<String> avatars = [
+    '👨‍🎓', '👩‍🎓', '🧑‍💻', '🧠', '🚀', '📚', '🏆', '🌟', '🎨', '🧪'
+  ];
+
   String _formatPercent(dynamic v) {
     if (v == null) return '—';
     final n = v is num ? v.toDouble() : double.tryParse(v.toString());
@@ -65,18 +69,38 @@ class StudentProfilePage extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Profile Avatar
-          CircleAvatar(
-            radius: 50,
-            backgroundColor: theme.colorScheme.primaryContainer,
-            child: Text(
-              user?.name.isNotEmpty == true ? user!.name[0].toUpperCase() : 'S',
-              style: TextStyle(
-                fontSize: 40,
-                fontWeight: FontWeight.bold,
-                color: theme.colorScheme.onPrimaryContainer,
+          // Profile Avatar with Selection
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 55,
+                backgroundColor: theme.colorScheme.primary.withAlpha(20),
+                child: CircleAvatar(
+                  radius: 50,
+                  backgroundColor: theme.colorScheme.primaryContainer,
+                  child: Text(
+                    avatars[ref.watch(userAvatarProvider)],
+                    style: const TextStyle(fontSize: 50),
+                  ),
+                ),
               ),
-            ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () => _showAvatarPicker(context, ref),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(Icons.edit_rounded, color: Colors.white, size: 16),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Text(
@@ -114,6 +138,101 @@ class StudentProfilePage extends ConsumerWidget {
               ],
             ),
           ),
+          // Overall Performance Card
+          ref.watch(studentMetricsProvider).when(
+            data: (m) {
+              final avgScore = (m['average_score'] as num?)?.toDouble() ?? 0.0;
+              final isDark = theme.brightness == Brightness.dark;
+              return Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: isDark 
+                      ? [const Color(0xFF1A1A2E), const Color(0xFF16213E)]
+                      : [Colors.white, Colors.grey.shade50],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: isDark ? Colors.blue.withAlpha(30) : Colors.blue.withAlpha(20)),
+                  boxShadow: isDark ? null : [
+                    BoxShadow(color: Colors.blue.withAlpha(10), blurRadius: 20, offset: const Offset(0, 10)),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      height: 70,
+                      width: 70,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CircularProgressIndicator(
+                            value: avgScore / 100,
+                            backgroundColor: isDark ? Colors.white10 : Colors.blue.withAlpha(20),
+                            color: Colors.blue,
+                            strokeWidth: 8,
+                          ),
+                          Center(
+                            child: Text(
+                              '${avgScore.toInt()}%',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isDark ? Colors.white : Colors.blue.shade900,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Overall Performance',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: isDark ? Colors.white : Colors.blue.shade900,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Your average score across all quizzes. Keep it up!',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white70 : Colors.blue.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          TextButton(
+                            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const StudentAnalyticsPage())),
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text('View Detailed Analytics', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                                const SizedBox(width: 4),
+                                Icon(Icons.arrow_forward_ios_rounded, size: 10, color: theme.colorScheme.primary),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, __) => const SizedBox(),
+          ),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -146,22 +265,6 @@ class StudentProfilePage extends ConsumerWidget {
               Expanded(
                 child: _buildStatCard(
                     context, 'Total Quizzes', quizzes.length.toString(), Icons.quiz, Colors.blue),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatCard(
-                  context,
-                  'Avg. Score',
-                  quizInsights.isNotEmpty
-                      ? '${_formatPercent(quizInsights.first['avg_percent'])}%'
-                      : '0%',
-                  Icons.analytics,
-                  Colors.green,
-                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -232,6 +335,61 @@ class StudentProfilePage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  void _showAvatarPicker(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Choose Your Avatar',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 24),
+              GridView.builder(
+                shrinkWrap: true,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                ),
+                itemCount: avatars.length,
+                itemBuilder: (context, index) {
+                  final isSelected = ref.watch(userAvatarProvider) == index;
+                  return GestureDetector(
+                    onTap: () {
+                      ref.read(userAvatarProvider.notifier).setAvatar(index);
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected ? Theme.of(context).colorScheme.primary.withAlpha(30) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected ? Theme.of(context).colorScheme.primary : Colors.grey.withAlpha(30),
+                          width: 2,
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(avatars[index], style: const TextStyle(fontSize: 24)),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
     );
   }
 }

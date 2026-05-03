@@ -60,6 +60,18 @@ class ApiClient {
     return _decode(response);
   }
 
+  Future<Map<String, dynamic>> delete(String path) async {
+    final uri = Uri.parse('$baseUrl$path');
+    
+    debugPrint('🌐 API DELETE: $path');
+    
+    final response = await http.delete(
+      uri,
+      headers: _headers(),
+    );
+    return _decode(response);
+  }
+
   Future<Map<String, dynamic>> uploadFile(
       String path, String fileField, List<int> fileBytes, String filename,
       [Map<String, String>? fields]) async {
@@ -86,13 +98,22 @@ class ApiClient {
   }
 
   Map<String, dynamic> _decode(http.Response response) {
+    Map<String, dynamic>? decodedBody;
+    try {
+      decodedBody = jsonDecode(response.body) as Map<String, dynamic>;
+    } catch (_) {}
+
     if (response.statusCode == 401) {
+      // If the server provides a specific message (e.g., "Invalid credentials"), use it.
+      if (decodedBody != null && decodedBody['message'] != null) {
+        throw Exception(decodedBody['message']);
+      }
       onUnauthorized?.call();
       throw UnauthorizedException('Session expired or unauthorized. Please login again.');
     }
 
     try {
-      final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+      final decoded = decodedBody ?? (jsonDecode(response.body) as Map<String, dynamic>);
       if (response.statusCode >= 400) {
         throw Exception(decoded['message'] ?? 'API error ${response.statusCode}');
       }

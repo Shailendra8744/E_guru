@@ -3,6 +3,9 @@ import 'package:e_guru/core/theme_provider.dart';
 import 'package:e_guru/features/admin/admin_analytics_page.dart';
 import 'package:e_guru/features/admin/user_management_page.dart';
 import 'package:e_guru/features/admin/subjects_page.dart';
+import 'package:e_guru/features/admin/admin_notes_page.dart';
+import 'package:e_guru/features/admin/admin_quizzes_page.dart';
+import 'package:e_guru/features/admin/teacher_management_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -243,13 +246,13 @@ class _AdminHomePageState extends ConsumerState<AdminHomePage> {
   Widget _buildQuickActions(ThemeData theme, bool isDark) {
     final actions = [
       _QuickAction(
-        icon: Icons.people_rounded,
-        label: 'Manage Users',
-        color: const Color(0xFF5C6BC0),
+        icon: Icons.school_rounded,
+        label: 'Teachers',
+        color: const Color(0xFF00897B),
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
-                builder: (_) => const UserManagementPage()),
+                builder: (_) => const TeacherManagementPage()),
           );
         },
       ),
@@ -274,23 +277,40 @@ class _AdminHomePageState extends ConsumerState<AdminHomePage> {
           );
         },
       ),
+      _QuickAction(
+        icon: Icons.quiz_rounded,
+        label: 'Quizzes',
+        color: const Color(0xFFFFA000),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+                builder: (_) => const AdminQuizzesPage()),
+          );
+        },
+      ),
+      _QuickAction(
+        icon: Icons.description_rounded,
+        label: 'Notes',
+        color: const Color(0xFFEC407A),
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(
+                builder: (_) => const AdminNotesPage()),
+          );
+        },
+      ),
     ];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Row(
-        children: actions
-            .map((a) => Expanded(
-                  child: Padding(
-                    padding: EdgeInsets.only(
-                        left: actions.indexOf(a) == 0 ? 0 : 6,
-                        right: actions.indexOf(a) == actions.length - 1
-                            ? 0
-                            : 6),
-                    child: _QuickActionCard(data: a, isDark: isDark),
-                  ),
-                ))
-            .toList(),
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 3,
+        mainAxisSpacing: 10,
+        crossAxisSpacing: 10,
+        childAspectRatio: 1.1,
+        children: actions.map((a) => _QuickActionCard(data: a, isDark: isDark)).toList(),
       ),
     );
   }

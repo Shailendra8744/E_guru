@@ -3,6 +3,7 @@ import 'package:e_guru/features/admin/user_management_page.dart';
 import 'package:e_guru/features/teacher/quiz_results_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class AdminAnalyticsPage extends ConsumerStatefulWidget {
   const AdminAnalyticsPage({super.key});
@@ -16,6 +17,8 @@ class _AdminAnalyticsPageState extends ConsumerState<AdminAnalyticsPage>
   Map<String, dynamic>? overview;
   Map<String, dynamic>? sla;
   List<dynamic> quizzes = [];
+  List<dynamic> subjectPopularity = [];
+  List<dynamic> platformProgress = [];
   String? error;
   late TabController _tabController;
 
@@ -33,25 +36,34 @@ class _AdminAnalyticsPageState extends ConsumerState<AdminAnalyticsPage>
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       error = null;
       overview = null;
       sla = null;
       quizzes = [];
+      subjectPopularity = [];
+      platformProgress = [];
     });
     try {
       final api = ref.read(apiClientProvider);
-      final o = await api.get('/admin/analytics/overview');
-      final s = await api.get('/admin/analytics/doubts-sla');
-      final q = await api.get('/admin/analytics/quizzes', {
-        'page': '1',
-        'per_page': '20',
-      });
+
+      // Load everything in parallel
+      final results = await Future.wait([
+        api.get('/admin/analytics/overview'),
+        api.get('/admin/analytics/doubts-sla'),
+        api.get('/admin/analytics/quizzes', {'page': '1', 'per_page': '20'}),
+        api.get('/admin/analytics/subject-popularity'),
+        api.get('/admin/analytics/platform-progress'),
+      ]);
+
       if (!mounted) return;
       setState(() {
-        overview = o;
-        sla = s;
-        quizzes = q['items'] as List<dynamic>;
+        overview = results[0];
+        sla = results[1];
+        quizzes = results[2]['items'] as List<dynamic>;
+        subjectPopularity = results[3]['items'] as List<dynamic>;
+        platformProgress = results[4]['items'] as List<dynamic>;
       });
     } catch (e) {
       if (!mounted) return;
@@ -330,7 +342,7 @@ class _AdminAnalyticsPageState extends ConsumerState<AdminAnalyticsPage>
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 1.4,
+              childAspectRatio: 1.15,
             ),
             children: [
               _StatMiniCard(
@@ -360,6 +372,38 @@ class _AdminAnalyticsPageState extends ConsumerState<AdminAnalyticsPage>
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 28),
+
+          // ── Subject Popularity Bar Chart ──
+          _SectionLabel(
+            title: 'Subject Popularity',
+            icon: Icons.bar_chart_rounded,
+            isDark: isDark,
+            theme: theme,
+          ),
+          const SizedBox(height: 12),
+          _PopularityBarChart(
+            data: subjectPopularity,
+            isDark: isDark,
+            theme: theme,
+          ),
+
+          const SizedBox(height: 28),
+
+          // ── Platform Progress Line Chart ──
+          _SectionLabel(
+            title: 'Student Progress Trend',
+            icon: Icons.trending_up_rounded,
+            isDark: isDark,
+            theme: theme,
+          ),
+          const SizedBox(height: 12),
+          _ProgressLineChart(
+            data: platformProgress,
+            isDark: isDark,
+            theme: theme,
           ),
 
           const SizedBox(height: 28),
@@ -727,6 +771,7 @@ class _StatMiniCard extends StatelessWidget {
               ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
             padding: const EdgeInsets.all(8),
@@ -1206,7 +1251,10 @@ class _QuizAnalyticsCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 5),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1226,23 +1274,27 @@ class _QuizAnalyticsCard extends StatelessWidget {
                               ),
                             ),
                           ),
-                          const SizedBox(width: 10),
-                          Icon(
-                            Icons.people_rounded,
-                            size: 13,
-                            color: isDark
-                                ? Colors.grey.shade600
-                                : Colors.grey.shade500,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${attempts ?? 0} attempts',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark
-                                  ? Colors.grey.shade500
-                                  : Colors.grey.shade600,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.people_rounded,
+                                size: 13,
+                                color: isDark
+                                    ? Colors.grey.shade600
+                                    : Colors.grey.shade500,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${attempts ?? 0} attempts',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: isDark
+                                      ? Colors.grey.shade500
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -1277,6 +1329,234 @@ class _QuizAnalyticsCard extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── POPULARITY BAR CHART ───
+class _PopularityBarChart extends StatelessWidget {
+  final List<dynamic> data;
+  final bool isDark;
+  final ThemeData theme;
+
+  const _PopularityBarChart({
+    required this.data,
+    required this.isDark,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return const SizedBox(
+        height: 150,
+        child: Center(child: Text('No data available')),
+      );
+    }
+
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surfaceContainerHigh : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: BarChart(
+        BarChartData(
+          alignment: BarChartAlignment.spaceAround,
+          maxY:
+              data
+                  .map(
+                    (e) => (int.tryParse(e['attempt_count'].toString()) ?? 0),
+                  )
+                  .fold(0, (max, e) => e > max ? e : max)
+                  .toDouble() *
+              1.2,
+          barTouchData: BarTouchData(
+            touchTooltipData: BarTouchTooltipData(
+              getTooltipColor: (_) => isDark ? Colors.blueGrey : Colors.white,
+              tooltipBorder: const BorderSide(color: Colors.grey, width: 0.5),
+            ),
+          ),
+          titlesData: FlTitlesData(
+            show: true,
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index >= 0 && index < data.length) {
+                    final name = data[index]['subject_name'] ?? '';
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        name.length > 5 ? '${name.substring(0, 5)}..' : name,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: isDark
+                              ? Colors.grey.shade500
+                              : Colors.grey.shade600,
+                        ),
+                      ),
+                    );
+                  }
+                  return const SizedBox();
+                },
+                reservedSize: 30,
+              ),
+            ),
+            leftTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+          ),
+          gridData: const FlGridData(show: false),
+          borderData: FlBorderData(show: false),
+          barGroups: data.asMap().entries.map((e) {
+            return BarChartGroupData(
+              x: e.key,
+              barRods: [
+                BarChartRodData(
+                  toY: (int.tryParse(e.value['attempt_count'].toString()) ?? 0)
+                      .toDouble(),
+                  color: theme.colorScheme.primary,
+                  width: 16,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(4),
+                    topRight: Radius.circular(4),
+                  ),
+                ),
+              ],
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── PROGRESS LINE CHART ───
+class _ProgressLineChart extends StatelessWidget {
+  final List<dynamic> data;
+  final bool isDark;
+  final ThemeData theme;
+
+  const _ProgressLineChart({
+    required this.data,
+    required this.isDark,
+    required this.theme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return const SizedBox(
+        height: 150,
+        child: Center(child: Text('No progress data yet')),
+      );
+    }
+
+    return Container(
+      height: 220,
+      padding: const EdgeInsets.fromLTRB(16, 24, 24, 8),
+      decoration: BoxDecoration(
+        color: isDark ? theme.colorScheme.surfaceContainerHigh : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: LineChart(
+        LineChartData(
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            getDrawingHorizontalLine: (value) => FlLine(
+              color: isDark ? Colors.grey.shade800 : Colors.grey.shade200,
+              strokeWidth: 1,
+            ),
+          ),
+          titlesData: FlTitlesData(
+            show: true,
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                getTitlesWidget: (value, meta) {
+                  final index = value.toInt();
+                  if (index % 5 == 0 && index >= 0 && index < data.length) {
+                    final dateStr = data[index]['date'] ?? '';
+                    if (dateStr.length >= 10) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          dateStr.substring(8, 10),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: isDark
+                                ? Colors.grey.shade500
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                  return const SizedBox();
+                },
+              ),
+            ),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 30,
+                getTitlesWidget: (value, meta) {
+                  return Text(
+                    '${value.toInt()}%',
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isDark
+                          ? Colors.grey.shade500
+                          : Colors.grey.shade600,
+                    ),
+                  );
+                },
+              ),
+            ),
+            topTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+            rightTitles: const AxisTitles(
+              sideTitles: SideTitles(showTitles: false),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          minX: 0,
+          maxX: (data.length - 1).toDouble(),
+          minY: 0,
+          maxY: 100,
+          lineBarsData: [
+            LineChartBarData(
+              spots: data.asMap().entries.map((e) {
+                return FlSpot(
+                  e.key.toDouble(),
+                  (double.tryParse(e.value['avg_percent'].toString()) ?? 0)
+                      .toDouble(),
+                );
+              }).toList(),
+              isCurved: true,
+              color: theme.colorScheme.primary,
+              barWidth: 3,
+              isStrokeCapRound: true,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: theme.colorScheme.primary.withAlpha(20),
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -1,3 +1,4 @@
+import 'package:e_guru/core/api_client.dart';
 import 'package:e_guru/core/auth_store.dart';
 import 'package:e_guru/features/student/quiz_taking_page.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +15,8 @@ final studentAllQuizzesProvider = FutureProvider<List<dynamic>>((ref) async {
 });
 
 class QuizzesPage extends ConsumerStatefulWidget {
-  const QuizzesPage({super.key});
+  final bool showBackButton;
+  const QuizzesPage({super.key, this.showBackButton = true});
 
   @override
   ConsumerState<QuizzesPage> createState() => _QuizzesPageState();
@@ -44,10 +46,12 @@ class _QuizzesPageState extends ConsumerState<QuizzesPage> {
             backgroundColor: isDark
                 ? const Color(0xFF0D1B2A)
                 : theme.colorScheme.primary,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
+            leading: widget.showBackButton
+                ? IconButton(
+                    icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  )
+                : null,
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: BoxDecoration(
@@ -286,8 +290,10 @@ class _QuizzesPageState extends ConsumerState<QuizzesPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  QuizTakingPage(quizId: q['id'] as int),
+                              builder: (_) => QuizTakingPage(
+                                quizId: q['id'] as int,
+                                quizTitle: q['title'] as String?,
+                              ),
                             ),
                           ).then((_) {
                             ref.refresh(studentAllQuizzesProvider);
